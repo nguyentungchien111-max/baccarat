@@ -1,4 +1,5 @@
 import app from "./app";
+import { backfillAccuracy } from "./lib/backfill";
 import { logger } from "./lib/logger";
 import { loadMemory, saveMemorySync } from "./lib/memory";
 import { applySeeds } from "./lib/seed";
@@ -20,6 +21,14 @@ if (Number.isNaN(port) || port <= 0) {
 
 loadMemory();
 applySeeds();
+try {
+  const report = backfillAccuracy({ onlyEmpty: true });
+  if (report.predictionsAdded > 0) {
+    logger.info(report, "auto-backfill on startup");
+  }
+} catch (err) {
+  logger.error({ err }, "backfill failed");
+}
 
 app.listen(port, (err) => {
   if (err) {

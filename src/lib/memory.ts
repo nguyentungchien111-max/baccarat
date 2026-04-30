@@ -50,6 +50,7 @@ export type AccuracyMemory = {
       currentStreak: number;
       bestStreak: number;
       lastAt: string;
+      recent: AccuracyRecent[];
     }
   >;
   byK: Record<string, { predictions: number; correct: number }>;
@@ -137,10 +138,22 @@ function migrate(raw: unknown): Memory {
     : [];
   const acc = (r as { accuracy?: Partial<AccuracyMemory> }).accuracy;
   if (acc && typeof acc === "object") {
+    const fixedByTable: AccuracyMemory["byTable"] = {};
+    for (const [k, v] of Object.entries(acc.byTable ?? {})) {
+      const vv = v as Partial<AccuracyMemory["byTable"][string]>;
+      fixedByTable[k] = {
+        predictions: vv.predictions ?? 0,
+        correct: vv.correct ?? 0,
+        currentStreak: vv.currentStreak ?? 0,
+        bestStreak: vv.bestStreak ?? 0,
+        lastAt: vv.lastAt ?? new Date(0).toISOString(),
+        recent: Array.isArray(vv.recent) ? vv.recent : [],
+      };
+    }
     fresh.accuracy = {
       totalPredictions: acc.totalPredictions ?? 0,
       correctPredictions: acc.correctPredictions ?? 0,
-      byTable: acc.byTable ?? {},
+      byTable: fixedByTable,
       byK: acc.byK ?? {},
       byBoard: {
         main: acc.byBoard?.main ?? { predictions: 0, correct: 0 },
@@ -156,6 +169,7 @@ function migrate(raw: unknown): Memory {
 }
 
 const RECENT_PREDICTIONS_KEEP = 500;
+const RECENT_PER_TABLE_KEEP = 200;
 
 function bucketOf(conf: number): string {
   if (conf < 0.5) return "<0.5";
@@ -187,7 +201,9 @@ export function recordAccuracy(
     currentStreak: 0,
     bestStreak: 0,
     lastAt: at,
+    recent: [],
   };
+  if (!Array.isArray(tbl.recent)) tbl.recent = [];
   tbl.predictions += 1;
   if (correct) {
     tbl.correct += 1;
@@ -197,6 +213,11 @@ export function recordAccuracy(
     tbl.currentStreak = 0;
   }
   tbl.lastAt = at;
+  const entry: AccuracyRecent = { table, predicted, actual, correct, k, board, conf, at };
+  tbl.recent.unshift(entry);
+  if (tbl.recent.length > RECENT_PER_TABLE_KEEP) {
+    tbl.recent.length = RECENT_PER_TABLE_KEEP;
+  }
   a.byTable[table] = tbl;
 
   const kKey = String(k);
@@ -216,7 +237,7 @@ export function recordAccuracy(
   if (correct) bEntry.correct += 1;
   a.byBucket[b] = bEntry;
 
-  a.recent.unshift({ table, predicted, actual, correct, k, board, conf, at });
+  a.recent.unshift(entry);
   if (a.recent.length > RECENT_PREDICTIONS_KEEP) {
     a.recent.length = RECENT_PREDICTIONS_KEEP;
   }

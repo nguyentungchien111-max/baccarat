@@ -177,7 +177,7 @@
           const [pRes, sRes, aRes] = await Promise.all([
             fetch("/api/predict/" + encodeURIComponent(name)),
             fetch("/api/sequence/" + encodeURIComponent(name)),
-            fetch("/api/stats/accuracy?recent=500"),
+            fetch("/api/stats/accuracy?recent=20&tableRecent=200"),
           ]);
           const p = await pRes.json();
           const s = await sRes.json();
@@ -200,9 +200,9 @@
 
         const tableAcc = (acc.byTable || {})[name] || {
           predictions: 0, correct: 0, accuracy: 0,
-          currentStreak: 0, bestStreak: 0,
+          currentStreak: 0, bestStreak: 0, recent: [],
         };
-        const recent = (acc.recent || []).filter((r) => r.table === name).slice(0, 50);
+        const recent = (tableAcc.recent || []).slice(0, 100);
 
         const histHtml = recent.length === 0
           ? '<div class="empty">Chưa có lịch sử dự đoán cho bàn này (cần thêm vài ván live)</div>'

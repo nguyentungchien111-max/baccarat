@@ -12,6 +12,7 @@ import { predictNext, type Prediction } from "../lib/predict";
 import { getCachedSource, pollOnce, type SourceRow } from "../lib/source";
 import { learnFromSequence } from "../lib/learner";
 import { applySeeds, SEED_SEQUENCES } from "../lib/seed";
+import { backfillAccuracy } from "../lib/backfill";
 
 const router: IRouter = Router();
 
@@ -423,6 +424,8 @@ router.get("/stats/accuracy", (req, res) => {
   function ratio(p: number, c: number) {
     return p > 0 ? Math.round((c / p) * 1000) / 1000 : 0;
   }
+  const includeRecent = req.query["tableRecent"] !== "0";
+  const tableRecentLimit = Math.min(Number(req.query["tableRecent"] ?? "100") || 100, 200);
   const byTable = Object.fromEntries(
     Object.entries(a.byTable)
       .map(([k, v]) => [
@@ -434,6 +437,7 @@ router.get("/stats/accuracy", (req, res) => {
           currentStreak: v.currentStreak,
           bestStreak: v.bestStreak,
           lastAt: v.lastAt,
+          ...(includeRecent ? { recent: (v.recent ?? []).slice(0, tableRecentLimit) } : {}),
         },
       ])
       .sort(([, a1], [, b1]) => (b1 as { predictions: number }).predictions - (a1 as { predictions: number }).predictions),
@@ -477,6 +481,12 @@ router.get("/stats/accuracy", (req, res) => {
     recent,
     note: "Chỉ tính ván live (không tính seed). k=số ký tự pattern. Bucket = mức confidence khi đoán.",
   });
+});
+
+router.post("/stats/backfill", (req, res) => {
+  const force = req.query["force"] === "1" || req.query["force"] === "true";
+  const r = backfillAccuracy({ onlyEmpty: !force });
+  res.json({ ok: true, ...r });
 });
 
 router.post("/stats/reset", (_req, res) => {
