@@ -24,6 +24,7 @@ export type Memory = {
   };
   tables: Record<string, TableState>;
   totals: { samples: number; updatedAt: string; shoesCompleted: number };
+  appliedSeeds: string[];
 };
 
 const DATA_DIR =
@@ -44,6 +45,7 @@ function emptyMemory(): Memory {
       updatedAt: new Date().toISOString(),
       shoesCompleted: 0,
     },
+    appliedSeeds: [],
   };
 }
 
@@ -78,6 +80,9 @@ function migrate(raw: unknown): Memory {
     updatedAt: r.totals?.updatedAt ?? new Date().toISOString(),
     shoesCompleted: r.totals?.shoesCompleted ?? 0,
   };
+  fresh.appliedSeeds = Array.isArray((r as { appliedSeeds?: unknown }).appliedSeeds)
+    ? ((r as { appliedSeeds: string[] }).appliedSeeds)
+    : [];
   return fresh;
 }
 

@@ -1,6 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { loadMemory, saveMemorySync } from "./lib/memory";
+import { applySeeds } from "./lib/seed";
 import { startPoller } from "./lib/source";
 
 const rawPort = process.env["PORT"];
@@ -18,6 +19,7 @@ if (Number.isNaN(port) || port <= 0) {
 }
 
 loadMemory();
+applySeeds();
 
 app.listen(port, (err) => {
   if (err) {

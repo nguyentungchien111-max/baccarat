@@ -11,6 +11,7 @@ import {
 import { predictNext, type Prediction } from "../lib/predict";
 import { getCachedSource, pollOnce, type SourceRow } from "../lib/source";
 import { learnFromSequence } from "../lib/learner";
+import { applySeeds, SEED_SEQUENCES } from "../lib/seed";
 
 const router: IRouter = Router();
 
@@ -254,6 +255,28 @@ router.get("/memory/stats", (_req, res) => {
     storagePath: memoryDataPath(),
     updatedAt: mem.totals.updatedAt,
   });
+});
+
+router.get("/memory/seeds", (_req, res) => {
+  const mem = loadMemory();
+  const applied = new Set(mem.appliedSeeds);
+  res.json({
+    totalSeeds: SEED_SEQUENCES.length,
+    appliedCount: SEED_SEQUENCES.filter((s) => applied.has(s.id)).length,
+    pendingCount: SEED_SEQUENCES.filter((s) => !applied.has(s.id)).length,
+    seeds: SEED_SEQUENCES.map((s) => ({
+      id: s.id,
+      table: s.table,
+      length: s.sequence.length,
+      source: s.source ?? null,
+      applied: applied.has(s.id),
+    })),
+  });
+});
+
+router.post("/memory/seed-now", (_req, res) => {
+  const r = applySeeds();
+  res.json({ ok: true, ...r, totalSeeds: SEED_SEQUENCES.length });
 });
 
 router.get("/memory/dump", (req, res) => {
