@@ -256,6 +256,78 @@ router.get("/memory/stats", (_req, res) => {
   });
 });
 
+router.get("/memory/dump", (req, res) => {
+  const mem = loadMemory();
+  const board = req.query["board"] as string | undefined;
+  const minTotal = Number(req.query["minTotal"] ?? "0");
+  const limit = Number(req.query["limit"] ?? "0");
+
+  function summarize(map: Record<string, Record<string, number>>) {
+    const rows: Array<{
+      tail: string;
+      k: number;
+      total: number;
+      counts: Record<string, number>;
+      bestPick: string;
+      bestRatio: number;
+    }> = [];
+    for (const [tail, counts] of Object.entries(map)) {
+      let total = 0;
+      let best = "";
+      let bestCount = -1;
+      for (const [k, v] of Object.entries(counts)) {
+        total += v;
+        if (v > bestCount) {
+          bestCount = v;
+          best = k;
+        }
+      }
+      if (total < minTotal) continue;
+      rows.push({
+        tail,
+        k: tail.length,
+        total,
+        counts,
+        bestPick: best,
+        bestRatio: total > 0 ? Math.round((bestCount / total) * 1000) / 1000 : 0,
+      });
+    }
+    rows.sort((a, b) => b.total - a.total || a.tail.localeCompare(b.tail));
+    return limit > 0 ? rows.slice(0, limit) : rows;
+  }
+
+  const boards: Array<"main" | "eye" | "small" | "cockroach"> = board
+    ? [board as "main" | "eye" | "small" | "cockroach"]
+    : ["main", "eye", "small", "cockroach"];
+
+  const ngrams: Record<string, ReturnType<typeof summarize>> = {};
+  for (const b of boards) {
+    if (mem.ngrams[b]) ngrams[b] = summarize(mem.ngrams[b]);
+  }
+
+  res.json({
+    storagePath: memoryDataPath(),
+    totalSamples: mem.totals.samples,
+    shoesCompleted: mem.totals.shoesCompleted,
+    tablesLearned: Object.keys(mem.tables).length,
+    updatedAt: mem.totals.updatedAt,
+    tables: mem.tables,
+    ngramKeyCounts: {
+      main: Object.keys(mem.ngrams.main).length,
+      eye: Object.keys(mem.ngrams.eye).length,
+      small: Object.keys(mem.ngrams.small).length,
+      cockroach: Object.keys(mem.ngrams.cockroach).length,
+    },
+    ngrams,
+    note: "Mỗi 'tail' là pattern đã thấy, 'counts' là số lần dẫn tới B/P/T tương ứng. bestPick = nước tiếp theo dự đoán cho pattern đó.",
+  });
+});
+
+router.get("/memory/raw", (_req, res) => {
+  const mem = loadMemory();
+  res.json(mem);
+});
+
 router.get("/export", (req, res) => {
   const mem = loadMemory();
   const includeShoes = req.query["shoes"] !== "false";
