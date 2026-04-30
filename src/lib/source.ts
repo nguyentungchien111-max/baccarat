@@ -1,5 +1,6 @@
 import { logger } from "./logger";
 import { learnFromSequence } from "./learner";
+import { markShoeChange } from "./memory";
 
 const SOURCE_URL =
   process.env["BACCARAT_SOURCE_URL"] ||
@@ -35,6 +36,11 @@ export function getCachedSource(): {
   return { rows: lastResults, fetchedAt: lastFetchedAt, error: lastError };
 }
 
+function isEmptyResult(s: string | undefined | null): boolean {
+  if (!s) return true;
+  return s.toUpperCase().replace(/[^BPT]/g, "").length === 0;
+}
+
 export async function pollOnce(): Promise<void> {
   try {
     const ctrl = new AbortController();
@@ -56,14 +62,22 @@ export async function pollOnce(): Promise<void> {
     lastFetchedAt = Date.now();
     lastError = null;
     let totalLearned = 0;
+    let shoeChanges = 0;
     for (const row of json.data) {
       if (!row.table_name) continue;
-      if (!row.result) continue;
+      if (isEmptyResult(row.result)) {
+        if (markShoeChange(row.table_name)) shoeChanges += 1;
+        continue;
+      }
       totalLearned += learnFromSequence(row.table_name, row.result);
     }
-    if (totalLearned > 0) {
+    if (totalLearned > 0 || shoeChanges > 0) {
       logger.info(
-        { tables: json.data.length, learned: totalLearned },
+        {
+          tables: json.data.length,
+          learned: totalLearned,
+          shoeChanges,
+        },
         "polled source",
       );
     }

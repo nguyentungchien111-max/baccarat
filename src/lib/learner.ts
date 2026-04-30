@@ -1,5 +1,6 @@
 import { analyze } from "./derive";
 import {
+  ensureTable,
   loadMemory,
   recordNgram,
   scheduleSave,
@@ -30,12 +31,29 @@ export function learnFromSequence(tableName: string, rawSeq: string): number {
   const cleaned = (rawSeq || "").toUpperCase().replace(/[^BPT]/g, "");
   if (!cleaned) return 0;
 
-  const prev = mem.tables[tableName]?.lastSeen ?? "";
+  const t = ensureTable(tableName);
+  const prev = t.lastSeen;
+  const wasShoeChange = t.inShoeChange;
+
   let startIdx = 0;
+  let resetShoe = false;
   if (prev && cleaned.startsWith(prev)) {
     startIdx = prev.length;
+  } else if (prev && !cleaned.startsWith(prev)) {
+    resetShoe = true;
+    startIdx = 0;
   } else {
     startIdx = 0;
+  }
+
+  if (resetShoe) {
+    t.recentShoes.unshift(prev);
+    if (t.recentShoes.length > 10) t.recentShoes.length = 10;
+    mem.totals.shoesCompleted += 1;
+    t.shoeNumber += 1;
+    t.lastShoeChangeAt = new Date().toISOString();
+  } else if (wasShoeChange) {
+    t.shoeNumber += 1;
   }
 
   let learned = 0;
@@ -64,17 +82,11 @@ export function learnFromSequence(tableName: string, rawSeq: string): number {
     learned += 1;
   }
 
-  const cur = mem.tables[tableName] ?? {
-    lastSeen: "",
-    updatedAt: "",
-    observations: 0,
-  };
-  mem.tables[tableName] = {
-    lastSeen: cleaned,
-    updatedAt: new Date().toISOString(),
-    observations: cur.observations + learned,
-  };
-  mem.totals.updatedAt = new Date().toISOString();
-  if (learned > 0) scheduleSave();
+  t.lastSeen = cleaned;
+  t.updatedAt = new Date().toISOString();
+  t.observations += learned;
+  t.inShoeChange = false;
+  mem.totals.updatedAt = t.updatedAt;
+  if (learned > 0 || wasShoeChange || resetShoe) scheduleSave();
   return learned;
 }
