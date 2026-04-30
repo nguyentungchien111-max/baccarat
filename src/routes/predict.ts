@@ -256,6 +256,59 @@ router.get("/memory/stats", (_req, res) => {
   });
 });
 
+router.get("/export", (req, res) => {
+  const mem = loadMemory();
+  const includeShoes = req.query["shoes"] !== "false";
+  const live = req.query["live"] === "true";
+  const liveTables = new Set<string>();
+  if (live) {
+    for (const r of getCachedSource().rows) liveTables.add(r.table_name);
+  }
+
+  const entries: Array<{ table: string; sequence: string; mode: "replace" }> = [];
+  for (const [name, t] of Object.entries(mem.tables)) {
+    if (live && !liveTables.has(name)) continue;
+    if (t.lastSeen.length > 0) {
+      entries.push({ table: name, sequence: t.lastSeen, mode: "replace" });
+    }
+    if (includeShoes && t.recentShoes.length > 0) {
+      t.recentShoes.forEach((seq, i) => {
+        if (seq.length > 0) {
+          entries.push({
+            table: `${name}-prev${i + 1}`,
+            sequence: seq,
+            mode: "replace",
+          });
+        }
+      });
+    }
+  }
+
+  res.json({
+    exportedAt: new Date().toISOString(),
+    totalSamples: mem.totals.samples,
+    shoesCompleted: mem.totals.shoesCompleted,
+    tablesExported: entries.length,
+    note: "POST mảng `entries` này vào /api/learn để nạp lại toàn bộ chuỗi (kể cả khi thay GitHub/Railway).",
+    entries,
+  });
+});
+
+router.get("/export.txt", (req, res) => {
+  const mem = loadMemory();
+  const includeShoes = req.query["shoes"] !== "false";
+  const lines: string[] = [];
+  for (const [name, t] of Object.entries(mem.tables)) {
+    if (t.lastSeen.length > 0) lines.push(`${name}: ${t.lastSeen}`);
+    if (includeShoes) {
+      t.recentShoes.forEach((seq, i) => {
+        if (seq.length > 0) lines.push(`${name}-prev${i + 1}: ${seq}`);
+      });
+    }
+  }
+  res.type("text/plain").send(lines.join("\n"));
+});
+
 router.post("/learn", (req, res) => {
   const body = (req.body ?? {}) as {
     table?: string;
