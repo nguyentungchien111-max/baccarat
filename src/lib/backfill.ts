@@ -9,8 +9,12 @@ export type BackfillReport = {
   perTable: Record<string, number>;
 };
 
-export function backfillAccuracy(opts?: { onlyEmpty?: boolean }): BackfillReport {
+export function backfillAccuracy(opts?: {
+  onlyEmpty?: boolean;
+  includeSeeds?: boolean;
+}): BackfillReport {
   const onlyEmpty = opts?.onlyEmpty ?? false;
+  const includeSeeds = opts?.includeSeeds ?? false;
   const mem = loadMemory();
   const report: BackfillReport = {
     tablesProcessed: 0,
@@ -19,6 +23,8 @@ export function backfillAccuracy(opts?: { onlyEmpty?: boolean }): BackfillReport
   };
 
   for (const [name, t] of Object.entries(mem.tables)) {
+    // Bỏ qua seed tables vì n-gram đã chứa chính chuỗi đó → backfill bị leak
+    if (!includeSeeds && name.startsWith("seed-")) continue;
     if (!t.lastSeen || t.lastSeen.length < 3) continue;
     const existing = mem.accuracy.byTable[name];
     if (onlyEmpty && existing && existing.predictions > 0) continue;
@@ -45,14 +51,13 @@ export function backfillAccuracy(opts?: { onlyEmpty?: boolean }): BackfillReport
         small: a.small,
         cockroach: a.cockroach,
       });
-      if (pred.pick === "B" || pred.pick === "P") {
-        const top = pred.details[0];
+      if (!pred.abstained && (pred.pick === "B" || pred.pick === "P")) {
         recordAccuracy(
           name,
           pred.pick,
           next as "B" | "P",
-          top?.k ?? 0,
-          top?.board ?? "main",
+          pred.topK,
+          pred.topBoard,
           pred.confidence,
         );
         added += 1;

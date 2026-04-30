@@ -81,14 +81,13 @@ export function learnFromSequence(
         small: aBefore.small,
         cockroach: aBefore.cockroach,
       });
-      if (pred.pick === "B" || pred.pick === "P") {
-        const top = pred.details[0];
+      if (!pred.abstained && (pred.pick === "B" || pred.pick === "P")) {
         recordAccuracy(
           tableName,
           pred.pick,
           next,
-          top?.k ?? 0,
-          top?.board ?? "main",
+          pred.topK,
+          pred.topBoard,
           pred.confidence,
         );
       }

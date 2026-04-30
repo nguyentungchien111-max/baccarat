@@ -47,6 +47,10 @@ function buildTableEntry(row: SourceRow): TableEntry {
         basis: "Bàn đang thay bộ bài, chưa có dữ liệu để dự đoán",
         details: [],
         totalSamples: 0,
+        topBoard: "main",
+        topK: 0,
+        abstained: true,
+        votes: { B: 0, P: 0 },
       }
     : predictNext(mem, {
         bigRoad: a.bigRoad,
@@ -485,8 +489,16 @@ router.get("/stats/accuracy", (req, res) => {
 
 router.post("/stats/backfill", (req, res) => {
   const force = req.query["force"] === "1" || req.query["force"] === "true";
-  const r = backfillAccuracy({ onlyEmpty: !force });
-  res.json({ ok: true, ...r });
+  const includeSeeds =
+    req.query["includeSeeds"] === "1" || req.query["includeSeeds"] === "true";
+  const r = backfillAccuracy({ onlyEmpty: !force, includeSeeds });
+  res.json({
+    ok: true,
+    ...r,
+    note: includeSeeds
+      ? "Đã backfill cả seed (lưu ý: số liệu seed bị leak vì n-gram chứa chính chuỗi đó)"
+      : "Bỏ qua seed để tránh leak; chỉ backfill bàn live",
+  });
 });
 
 router.post("/stats/reset", (_req, res) => {
