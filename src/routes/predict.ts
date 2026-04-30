@@ -1,13 +1,16 @@
 import { Router, type IRouter } from "express";
 import { analyze } from "../lib/derive";
 import {
+  ensureTable,
   loadMemory,
   memoryDataPath,
   saveMemorySync,
+  scheduleSave,
   type TableState,
 } from "../lib/memory";
 import { predictNext, type Prediction } from "../lib/predict";
 import { getCachedSource, pollOnce, type SourceRow } from "../lib/source";
+import { learnFromSequence } from "../lib/learner";
 
 const router: IRouter = Router();
 
@@ -250,6 +253,73 @@ router.get("/memory/stats", (_req, res) => {
     ),
     storagePath: memoryDataPath(),
     updatedAt: mem.totals.updatedAt,
+  });
+});
+
+router.post("/learn", (req, res) => {
+  const body = (req.body ?? {}) as {
+    table?: string;
+    sequence?: string;
+    mode?: "append" | "replace";
+    entries?: Array<{ table?: string; sequence?: string; mode?: "append" | "replace" }>;
+  };
+  const items = body.entries && Array.isArray(body.entries)
+    ? body.entries
+    : [{ table: body.table, sequence: body.sequence, mode: body.mode }];
+
+  const results: Array<{
+    table: string;
+    learned: number;
+    sequenceLength: number;
+    mode: "append" | "replace";
+    error?: string;
+  }> = [];
+
+  let totalLearned = 0;
+  for (const item of items) {
+    const tableName = (item.table ?? "manual").toString().trim() || "manual";
+    const seq = (item.sequence ?? "").toString();
+    const mode: "append" | "replace" = item.mode === "replace" ? "replace" : "append";
+    const cleaned = seq.toUpperCase().replace(/[^BPT]/g, "");
+    if (!cleaned) {
+      results.push({
+        table: tableName,
+        learned: 0,
+        sequenceLength: 0,
+        mode,
+        error: "sequence rỗng hoặc không có B/P/T",
+      });
+      continue;
+    }
+    if (mode === "replace") {
+      const t = ensureTable(tableName);
+      if (t.lastSeen.length > 0) {
+        t.recentShoes.unshift(t.lastSeen);
+        if (t.recentShoes.length > 10) t.recentShoes.length = 10;
+        t.shoeNumber += 1;
+      }
+      t.lastSeen = "";
+      t.inShoeChange = false;
+      t.lastShoeChangeAt = new Date().toISOString();
+      scheduleSave();
+    }
+    const learned = learnFromSequence(tableName, cleaned);
+    totalLearned += learned;
+    results.push({
+      table: tableName,
+      learned,
+      sequenceLength: cleaned.length,
+      mode,
+    });
+  }
+
+  saveMemorySync();
+  const mem = loadMemory();
+  res.json({
+    ok: true,
+    totalLearned,
+    totalSamples: mem.totals.samples,
+    items: results,
   });
 });
 
