@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Baccarat Analyzer</title>
+    <style>
+      * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: #0b0d10;
+        color: #e7eaee;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        font-size: 15px;
+        line-height: 1.45;
+      }
+      a { color: #6cb8ff; }
+      .wrap { max-width: 760px; margin: 0 auto; padding: 14px 14px 60px; }
+      header {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 10px; margin-bottom: 14px;
+      }
+      header h1 { margin: 0; font-size: 18px; font-weight: 600; }
+      .pill {
+        display: inline-block; font-size: 11px; padding: 3px 8px;
+        background: #1d2128; border-radius: 999px; color: #9ba3ad;
+      }
+      .pill.live { color: #1b1; background: #11261a; }
+      .pill.err  { color: #f55; background: #2b1316; }
+      select, button, input {
+        font: inherit; color: inherit;
+        background: #161a20; border: 1px solid #262c34; border-radius: 10px;
+        padding: 10px 12px;
+      }
+      select { width: 100%; appearance: none; background-image: linear-gradient(45deg, transparent 50%, #888 50%), linear-gradient(135deg, #888 50%, transparent 50%); background-position: calc(100% - 18px) 50%, calc(100% - 12px) 50%; background-size: 6px 6px; background-repeat: no-repeat; padding-right: 32px; }
+      button { cursor: pointer; }
+      button:hover { background: #1c222a; }
+      .row { display: flex; gap: 10px; align-items: center; }
+      .row > * { flex: 1; }
+      .row > button { flex: 0 0 auto; }
+      .card {
+        background: #12161c; border: 1px solid #1f242c; border-radius: 14px;
+        padding: 14px; margin-bottom: 12px;
+      }
+      .label { color: #8e96a0; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
+      .pred-big { display: flex; align-items: center; gap: 16px; }
+      .pred-circle {
+        width: 86px; height: 86px; border-radius: 50%;
+        display: grid; place-items: center;
+        font-size: 44px; font-weight: 800; color: #fff;
+        flex: 0 0 auto;
+      }
+      .pred-circle.B { background: linear-gradient(135deg, #e64545, #b81f1f); box-shadow: 0 4px 18px rgba(230, 69, 69, .4); }
+      .pred-circle.P { background: linear-gradient(135deg, #4690ff, #1f5ed8); box-shadow: 0 4px 18px rgba(70, 144, 255, .4); }
+      .pred-circle.NONE { background: #2a2f37; color: #888; font-size: 18px; }
+      .pred-info { flex: 1; min-width: 0; }
+      .pred-info .reason { color: #9ba3ad; font-size: 13px; margin-top: 2px; word-break: break-word; }
+      .conf-bar { background: #1d222a; border-radius: 999px; height: 10px; overflow: hidden; margin-top: 8px; }
+      .conf-bar > div { height: 100%; background: linear-gradient(90deg, #ffb648, #25c25c); transition: width .3s; }
+      .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+      .stat { background: #161a20; border-radius: 10px; padding: 10px 12px; }
+      .stat .v { font-size: 22px; font-weight: 700; }
+      .stat .v.acc { color: #25c25c; }
+      .stat .v.acc.low { color: #e64545; }
+      .stat .v.acc.mid { color: #ffb648; }
+      .stat .k { color: #8e96a0; font-size: 12px; }
+      .seq { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; word-break: break-all; line-height: 1.6; }
+      .seq .B { color: #ff6e6e; font-weight: 700; }
+      .seq .P { color: #6ea8ff; font-weight: 700; }
+      .seq .T { color: #6ee07d; opacity: .8; }
+      .hist { display: flex; flex-direction: column; gap: 4px; max-height: 360px; overflow-y: auto; }
+      .h-row {
+        display: grid; grid-template-columns: 22px 1fr auto; gap: 8px;
+        padding: 6px 8px; border-radius: 8px; font-size: 13px;
+      }
+      .h-row.ok { background: #122017; }
+      .h-row.no { background: #20131a; }
+      .h-row .mark { font-weight: 700; }
+      .h-row.ok .mark { color: #25c25c; }
+      .h-row.no .mark { color: #e64545; }
+      .h-row .meta { color: #8e96a0; font-size: 11px; text-align: right; }
+      .h-pp { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .h-pp .B { color: #ff6e6e; font-weight: 700; }
+      .h-pp .P { color: #6ea8ff; font-weight: 700; }
+      .empty { color: #777; text-align: center; padding: 20px 0; font-size: 13px; }
+      .toggle {
+        display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+        background: #161a20; border: 1px solid #262c34; border-radius: 999px; padding: 6px 12px;
+        font-size: 12px;
+      }
+      .toggle.on { background: #11261a; border-color: #1f5230; color: #67d489; }
+      .muted { color: #6c747e; font-size: 12px; }
+      .footer { text-align: center; color: #4a525c; font-size: 11px; margin-top: 18px; }
+      @media (max-width: 480px) {
+        .grid2 { grid-template-columns: 1fr; }
+        .pred-circle { width: 70px; height: 70px; font-size: 36px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <h1>🎴 Baccarat Analyzer</h1>
+        <span id="status" class="pill">đang tải…</span>
+      </header>
+
+      <div class="card">
+        <div class="label">Chọn bàn</div>
+        <div class="row">
+          <select id="tableSel"><option>Đang tải…</option></select>
+          <button id="refreshBtn" title="Làm mới">↻</button>
+        </div>
+        <div style="margin-top:10px; display:flex; justify-content: space-between; align-items: center;">
+          <span class="toggle on" id="autoBtn">⏱ Tự cập nhật 8s</span>
+          <span class="muted" id="lastUpdate">—</span>
+        </div>
+      </div>
+
+      <div id="content"></div>
+
+      <div class="footer">
+        Dữ liệu nguồn: shop.thiennhan.site/bcr.php · cập nhật mỗi 8s ·
+        <a href="/api/stats/accuracy" target="_blank">stats JSON</a> ·
+        <a href="/api/sequences" target="_blank">all sequences</a>
+      </div>
+    </div>
+
+    <script>
+      const $ = (q) => document.querySelector(q);
+      const state = {
+        selected: null,
+        autoTick: true,
+        timer: null,
+      };
+
+      const fmtPct = (v) => (v == null ? "—" : (v * 100).toFixed(1) + "%");
+      const accColor = (v) => (v >= 0.6 ? "" : v >= 0.5 ? "mid" : "low");
+      const colorSeq = (s) =>
+        (s || "").split("").map((c) => `<span class="${c}">${c}</span>`).join("");
+
+      function setStatus(text, cls) {
+        const el = $("#status");
+        el.textContent = text;
+        el.className = "pill " + (cls || "");
+      }
+
+      async function loadTables(preserveSel) {
+        try {
+          const r = await fetch("/api/predict");
+          const j = await r.json();
+          const sel = $("#tableSel");
+          const cur = preserveSel ? sel.value : null;
+          const names = j.tables ? j.tables.map((t) => t.table) : [];
+          if (names.length === 0) {
+            sel.innerHTML = '<option value="">(chưa có bàn nào)</option>';
+            return null;
+          }
+          sel.innerHTML = names
+            .map((n) => `<option value="${n}">Bàn ${n}</option>`)
+            .join("");
+          if (cur && names.includes(cur)) sel.value = cur;
+          else if (state.selected && names.includes(state.selected)) sel.value = state.selected;
+          state.selected = sel.value;
+          setStatus("LIVE", "live");
+          return j;
+        } catch (e) {
+          setStatus("offline", "err");
+          return null;
+        }
+      }
+
+      async function loadTable(name) {
+        if (!name) return;
+        setStatus("đang tải…", "");
+        try {
+          const [pRes, sRes, aRes] = await Promise.all([
+            fetch("/api/predict/" + encodeURIComponent(name)),
+            fetch("/api/sequence/" + encodeURIComponent(name)),
+            fetch("/api/stats/accuracy?recent=500"),
+          ]);
+          const p = await pRes.json();
+          const s = await sRes.json();
+          const a = await aRes.json();
+          render(name, p, s, a);
+          setStatus("LIVE", "live");
+          $("#lastUpdate").textContent = "cập nhật: " + new Date().toLocaleTimeString("vi-VN");
+        } catch (e) {
+          setStatus("offline", "err");
+        }
+      }
+
+      function render(name, pred, seq, acc) {
+        const pick = pred.pick || "NONE";
+        const conf = pred.confidence || 0;
+        const detail = pred.details && pred.details[0];
+        const reason = detail
+          ? `pattern <b>${detail.tail}</b> (k=${detail.k}, board=${detail.board}, weight=${detail.weight.toFixed(1)})`
+          : (pred.reason || "chưa đủ dữ liệu");
+
+        const tableAcc = (acc.byTable || {})[name] || {
+          predictions: 0, correct: 0, accuracy: 0,
+          currentStreak: 0, bestStreak: 0,
+        };
+        const recent = (acc.recent || []).filter((r) => r.table === name).slice(0, 50);
+
+        const histHtml = recent.length === 0
+          ? '<div class="empty">Chưa có lịch sử dự đoán cho bàn này (cần thêm vài ván live)</div>'
+          : recent.map((r) => {
+              const t = new Date(r.at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+              return `<div class="h-row ${r.correct ? "ok" : "no"}">
+                <span class="mark">${r.correct ? "✓" : "✗"}</span>
+                <span class="h-pp">đoán <span class="${r.predicted}">${r.predicted}</span> → ra <span class="${r.actual}">${r.actual}</span></span>
+                <span class="meta">${(r.conf * 100).toFixed(0)}% · k${r.k} · ${t}</span>
+              </div>`;
+            }).join("");
+
+        const mainSeq = (seq && seq.mainSequence) || "";
+        const shoeNum = seq && seq.shoeNumber != null ? seq.shoeNumber : "—";
+        const inChange = seq && seq.inShoeChange;
+
+        $("#content").innerHTML = `
+          <div class="card">
+            <div class="label">Dự đoán ván tiếp theo · Bàn ${name}</div>
+            <div class="pred-big">
+              <div class="pred-circle ${pick}">${pick === "NONE" ? "?" : pick}</div>
+              <div class="pred-info">
+                <div style="font-size: 14px; color: #c8cfd8;">
+                  ${pick === "B" ? "Banker (Đỏ)" : pick === "P" ? "Player (Xanh)" : "Không đủ tín hiệu"}
+                </div>
+                <div class="reason">${reason}</div>
+                <div class="conf-bar"><div style="width:${(conf * 100).toFixed(1)}%"></div></div>
+                <div style="margin-top:6px; font-size:12px;">
+                  <span class="muted">Độ tin cậy:</span> <b>${fmtPct(conf)}</b>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="label">Tỷ lệ đoán đúng · Bàn ${name}</div>
+            <div class="grid2">
+              <div class="stat">
+                <div class="v acc ${accColor(tableAcc.accuracy)}">${fmtPct(tableAcc.accuracy)}</div>
+                <div class="k">${tableAcc.correct}/${tableAcc.predictions} ván đoán đúng</div>
+              </div>
+              <div class="stat">
+                <div class="v" style="color:#67d489">🔥 ${tableAcc.currentStreak}</div>
+                <div class="k">đang đúng liên tiếp · best: ${tableAcc.bestStreak}</div>
+              </div>
+            </div>
+            <div style="margin-top:10px; display:flex; gap:10px; font-size:12px; color:#8e96a0;">
+              <span>Toàn hệ thống: <b style="color:#e7eaee">${fmtPct(acc.overall && acc.overall.accuracy)}</b> (${(acc.overall && acc.overall.correctPredictions) || 0}/${(acc.overall && acc.overall.totalPredictions) || 0})</span>
+              <span>· 20 ván gần nhất: <b style="color:#e7eaee">${fmtPct(acc.overall && acc.overall.last20 && acc.overall.last20.accuracy)}</b></span>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="label">Lịch sử dự đoán đúng/sai · Bàn ${name}</div>
+            <div class="hist">${histHtml}</div>
+          </div>
+
+          <div class="card">
+            <div class="label">Chuỗi hiện tại · Shoe #${shoeNum}${inChange ? " · 🔄 đang đổi shoe" : ""}</div>
+            <div class="seq">${mainSeq ? colorSeq(mainSeq) : '<span class="empty">trống</span>'}</div>
+            <div class="muted" style="margin-top:6px">${mainSeq.length} ván trong shoe hiện tại</div>
+          </div>
+        `;
+      }
+
+      async function tick(preserve) {
+        await loadTables(preserve);
+        await loadTable(state.selected);
+      }
+
+      function startTimer() {
+        if (state.timer) clearInterval(state.timer);
+        if (state.autoTick) state.timer = setInterval(() => tick(true), 8000);
+      }
+
+      $("#tableSel").addEventListener("change", (e) => {
+        state.selected = e.target.value;
+        loadTable(state.selected);
+      });
+      $("#refreshBtn").addEventListener("click", () => tick(true));
+      $("#autoBtn").addEventListener("click", () => {
+        state.autoTick = !state.autoTick;
+        $("#autoBtn").classList.toggle("on", state.autoTick);
+        $("#autoBtn").textContent = state.autoTick ? "⏱ Tự cập nhật 8s" : "⏸ Đã dừng tự cập nhật";
+        startTimer();
+      });
+
+      tick(false).then(() => startTimer());
+    </script>
+  </body>
+</html>
