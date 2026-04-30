@@ -412,6 +412,93 @@ router.get("/export.txt", (req, res) => {
   res.type("text/plain").send(lines.join("\n"));
 });
 
+router.get("/stats/accuracy", (req, res) => {
+  const mem = loadMemory();
+  const a = mem.accuracy;
+  const recentLimit = Math.min(Number(req.query["recent"] ?? "50") || 50, 500);
+  const overall =
+    a.totalPredictions > 0
+      ? Math.round((a.correctPredictions / a.totalPredictions) * 1000) / 1000
+      : 0;
+  function ratio(p: number, c: number) {
+    return p > 0 ? Math.round((c / p) * 1000) / 1000 : 0;
+  }
+  const byTable = Object.fromEntries(
+    Object.entries(a.byTable)
+      .map(([k, v]) => [
+        k,
+        {
+          predictions: v.predictions,
+          correct: v.correct,
+          accuracy: ratio(v.predictions, v.correct),
+          currentStreak: v.currentStreak,
+          bestStreak: v.bestStreak,
+          lastAt: v.lastAt,
+        },
+      ])
+      .sort(([, a1], [, b1]) => (b1 as { predictions: number }).predictions - (a1 as { predictions: number }).predictions),
+  );
+  const byK = Object.fromEntries(
+    Object.entries(a.byK)
+      .map(([k, v]) => [k, { ...v, accuracy: ratio(v.predictions, v.correct) }])
+      .sort(([k1], [k2]) => Number(k1) - Number(k2)),
+  );
+  const byBoard = Object.fromEntries(
+    Object.entries(a.byBoard).map(([k, v]) => [
+      k,
+      { ...v, accuracy: ratio(v.predictions, v.correct) },
+    ]),
+  );
+  const buckets = ["<0.5", "0.5-0.6", "0.6-0.7", "0.7-0.8", "0.8-0.9", "0.9+"];
+  const byBucket = Object.fromEntries(
+    buckets.map((b) => {
+      const v = a.byBucket[b] ?? { predictions: 0, correct: 0 };
+      return [b, { ...v, accuracy: ratio(v.predictions, v.correct) }];
+    }),
+  );
+  const recent = a.recent.slice(0, recentLimit);
+  const last20 = a.recent.slice(0, 20);
+  const last20Correct = last20.filter((r) => r.correct).length;
+  res.json({
+    overall: {
+      totalPredictions: a.totalPredictions,
+      correctPredictions: a.correctPredictions,
+      accuracy: overall,
+      last20: {
+        total: last20.length,
+        correct: last20Correct,
+        accuracy: last20.length > 0 ? Math.round((last20Correct / last20.length) * 1000) / 1000 : 0,
+      },
+    },
+    byTable,
+    byK,
+    byBoard,
+    byBucket,
+    recent,
+    note: "Chỉ tính ván live (không tính seed). k=số ký tự pattern. Bucket = mức confidence khi đoán.",
+  });
+});
+
+router.post("/stats/reset", (_req, res) => {
+  const mem = loadMemory();
+  mem.accuracy = {
+    totalPredictions: 0,
+    correctPredictions: 0,
+    byTable: {},
+    byK: {},
+    byBoard: {
+      main: { predictions: 0, correct: 0 },
+      eye: { predictions: 0, correct: 0 },
+      small: { predictions: 0, correct: 0 },
+      cockroach: { predictions: 0, correct: 0 },
+    },
+    byBucket: {},
+    recent: [],
+  };
+  saveMemorySync();
+  res.json({ ok: true, message: "accuracy stats reset" });
+});
+
 router.post("/learn", (req, res) => {
   const body = (req.body ?? {}) as {
     table?: string;

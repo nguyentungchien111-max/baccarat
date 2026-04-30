@@ -2,10 +2,12 @@ import { analyze } from "./derive";
 import {
   ensureTable,
   loadMemory,
+  recordAccuracy,
   recordNgram,
   scheduleSave,
   type Memory,
 } from "./memory";
+import { predictNext } from "./predict";
 
 const KS = [8, 7, 6, 5, 4, 3, 2];
 const SUB_KS = [6, 5, 4, 3, 2];
@@ -26,10 +28,15 @@ function recordAllK(
   }
 }
 
-export function learnFromSequence(tableName: string, rawSeq: string): number {
+export function learnFromSequence(
+  tableName: string,
+  rawSeq: string,
+  opts?: { trackAccuracy?: boolean },
+): number {
   const mem = loadMemory();
   const cleaned = (rawSeq || "").toUpperCase().replace(/[^BPT]/g, "");
   if (!cleaned) return 0;
+  const trackAcc = opts?.trackAccuracy !== false;
 
   const t = ensureTable(tableName);
   const prev = t.lastSeen;
@@ -66,6 +73,26 @@ export function learnFromSequence(tableName: string, rawSeq: string): number {
     const after = cleaned.slice(0, i + 1);
     const aBefore = analyze(before);
     const aAfter = analyze(after);
+
+    if (trackAcc && aBefore.bigRoad.length >= 2) {
+      const pred = predictNext(mem, {
+        bigRoad: aBefore.bigRoad,
+        eye: aBefore.eye,
+        small: aBefore.small,
+        cockroach: aBefore.cockroach,
+      });
+      if (pred.pick === "B" || pred.pick === "P") {
+        const top = pred.details[0];
+        recordAccuracy(
+          tableName,
+          pred.pick,
+          next,
+          top?.k ?? 0,
+          top?.board ?? "main",
+          pred.confidence,
+        );
+      }
+    }
 
     recordAllK(mem, "main", aBefore.bigRoad, next, KS);
 

@@ -53,7 +53,7 @@ export function applySeeds(): { applied: number; learned: number; skipped: numbe
       t.shoeNumber += 1;
     }
     t.lastSeen = "";
-    learned += learnFromSequence(seed.table, seed.sequence);
+    learned += learnFromSequence(seed.table, seed.sequence, { trackAccuracy: false });
     mem.appliedSeeds.push(seed.id);
     applied++;
   }

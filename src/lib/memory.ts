@@ -25,6 +25,40 @@ export type Memory = {
   tables: Record<string, TableState>;
   totals: { samples: number; updatedAt: string; shoesCompleted: number };
   appliedSeeds: string[];
+  accuracy: AccuracyMemory;
+};
+
+export type AccuracyRecent = {
+  table: string;
+  predicted: "B" | "P";
+  actual: "B" | "P";
+  correct: boolean;
+  k: number;
+  board: "main" | "eye" | "small" | "cockroach";
+  conf: number;
+  at: string;
+};
+
+export type AccuracyMemory = {
+  totalPredictions: number;
+  correctPredictions: number;
+  byTable: Record<
+    string,
+    {
+      predictions: number;
+      correct: number;
+      currentStreak: number;
+      bestStreak: number;
+      lastAt: string;
+    }
+  >;
+  byK: Record<string, { predictions: number; correct: number }>;
+  byBoard: Record<
+    "main" | "eye" | "small" | "cockroach",
+    { predictions: number; correct: number }
+  >;
+  byBucket: Record<string, { predictions: number; correct: number }>;
+  recent: AccuracyRecent[];
 };
 
 const DATA_DIR =
@@ -34,6 +68,23 @@ const MEM_PATH = path.join(DATA_DIR, "baccarat-memory.json");
 const RECENT_SHOES_KEEP = 10;
 
 let mem: Memory | null = null;
+
+function emptyAccuracy(): AccuracyMemory {
+  return {
+    totalPredictions: 0,
+    correctPredictions: 0,
+    byTable: {},
+    byK: {},
+    byBoard: {
+      main: { predictions: 0, correct: 0 },
+      eye: { predictions: 0, correct: 0 },
+      small: { predictions: 0, correct: 0 },
+      cockroach: { predictions: 0, correct: 0 },
+    },
+    byBucket: {},
+    recent: [],
+  };
+}
 
 function emptyMemory(): Memory {
   return {
@@ -46,6 +97,7 @@ function emptyMemory(): Memory {
       shoesCompleted: 0,
     },
     appliedSeeds: [],
+    accuracy: emptyAccuracy(),
   };
 }
 
@@ -83,7 +135,92 @@ function migrate(raw: unknown): Memory {
   fresh.appliedSeeds = Array.isArray((r as { appliedSeeds?: unknown }).appliedSeeds)
     ? ((r as { appliedSeeds: string[] }).appliedSeeds)
     : [];
+  const acc = (r as { accuracy?: Partial<AccuracyMemory> }).accuracy;
+  if (acc && typeof acc === "object") {
+    fresh.accuracy = {
+      totalPredictions: acc.totalPredictions ?? 0,
+      correctPredictions: acc.correctPredictions ?? 0,
+      byTable: acc.byTable ?? {},
+      byK: acc.byK ?? {},
+      byBoard: {
+        main: acc.byBoard?.main ?? { predictions: 0, correct: 0 },
+        eye: acc.byBoard?.eye ?? { predictions: 0, correct: 0 },
+        small: acc.byBoard?.small ?? { predictions: 0, correct: 0 },
+        cockroach: acc.byBoard?.cockroach ?? { predictions: 0, correct: 0 },
+      },
+      byBucket: acc.byBucket ?? {},
+      recent: Array.isArray(acc.recent) ? acc.recent : [],
+    };
+  }
   return fresh;
+}
+
+const RECENT_PREDICTIONS_KEEP = 500;
+
+function bucketOf(conf: number): string {
+  if (conf < 0.5) return "<0.5";
+  if (conf < 0.6) return "0.5-0.6";
+  if (conf < 0.7) return "0.6-0.7";
+  if (conf < 0.8) return "0.7-0.8";
+  if (conf < 0.9) return "0.8-0.9";
+  return "0.9+";
+}
+
+export function recordAccuracy(
+  table: string,
+  predicted: "B" | "P",
+  actual: "B" | "P",
+  k: number,
+  board: "main" | "eye" | "small" | "cockroach",
+  conf: number,
+): void {
+  const m = loadMemory();
+  const a = m.accuracy;
+  const correct = predicted === actual;
+  const at = new Date().toISOString();
+  a.totalPredictions += 1;
+  if (correct) a.correctPredictions += 1;
+
+  const tbl = a.byTable[table] ?? {
+    predictions: 0,
+    correct: 0,
+    currentStreak: 0,
+    bestStreak: 0,
+    lastAt: at,
+  };
+  tbl.predictions += 1;
+  if (correct) {
+    tbl.correct += 1;
+    tbl.currentStreak += 1;
+    if (tbl.currentStreak > tbl.bestStreak) tbl.bestStreak = tbl.currentStreak;
+  } else {
+    tbl.currentStreak = 0;
+  }
+  tbl.lastAt = at;
+  a.byTable[table] = tbl;
+
+  const kKey = String(k);
+  const kEntry = a.byK[kKey] ?? { predictions: 0, correct: 0 };
+  kEntry.predictions += 1;
+  if (correct) kEntry.correct += 1;
+  a.byK[kKey] = kEntry;
+
+  const boardEntry = a.byBoard[board] ?? { predictions: 0, correct: 0 };
+  boardEntry.predictions += 1;
+  if (correct) boardEntry.correct += 1;
+  a.byBoard[board] = boardEntry;
+
+  const b = bucketOf(conf);
+  const bEntry = a.byBucket[b] ?? { predictions: 0, correct: 0 };
+  bEntry.predictions += 1;
+  if (correct) bEntry.correct += 1;
+  a.byBucket[b] = bEntry;
+
+  a.recent.unshift({ table, predicted, actual, correct, k, board, conf, at });
+  if (a.recent.length > RECENT_PREDICTIONS_KEEP) {
+    a.recent.length = RECENT_PREDICTIONS_KEEP;
+  }
+  scheduleSave();
 }
 
 export function loadMemory(): Memory {
