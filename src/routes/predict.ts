@@ -268,10 +268,18 @@ router.get("/memory/seeds", (_req, res) => {
       id: s.id,
       table: s.table,
       length: s.sequence.length,
+      sequence: s.sequence,
       source: s.source ?? null,
       applied: applied.has(s.id),
     })),
   });
+});
+
+router.get("/memory/seeds.txt", (_req, res) => {
+  const lines = SEED_SEQUENCES.map(
+    (s) => `${s.id} | ${s.table} (len=${s.sequence.length}): ${s.sequence}`,
+  );
+  res.type("text/plain").send(lines.join("\n"));
 });
 
 router.post("/memory/seed-now", (_req, res) => {
